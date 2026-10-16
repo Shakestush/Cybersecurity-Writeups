@@ -1,0 +1,170 @@
+# Attacking Web Applications with FFUF — HTB Academy Writeup
+
+**Platform:** Hack The Box Academy
+**Module:** [Attacking Web Applications with Ffuf](https://academy.hackthebox.com/achievement/1478152/54)
+**Category:** Web Fuzzing
+**Author:** Manasseh Mutugi
+
+> **Note on flags:** HTB Academy's terms discourage publicly sharing flags/answers from paid modules. The flags below are included for my own portfolio record — consider redacting them (or linking only the sharable completion certificate) before pushing this publicly if you want to stay strictly within their ToS.
+
+---
+
+## Objective
+
+Learn to use `ffuf` (Fuzz Faster U Fool) for directory discovery, page/extension fuzzing, virtual host (subdomain) discovery, and HTTP parameter/value fuzzing against a web application — the core workflow for finding content that isn't linked anywhere in a site's visible navigation.
+
+## What is Fuzzing?
+
+Fuzzing sends varied, often malformed or unexpected input to an interface and observes the response. Applied to web apps, that means:
+- Sending a wordlist of common directory/file names to discover hidden content
+- Sending candidate subdomains to a Host header to discover virtual hosts
+- Sending candidate parameter names/values to discover hidden functionality
+
+## Methodology
+
+### 1. Directory Fuzzing
+
+Base syntax: `-w` for the wordlist, `-u` for the target URL, with `FUZZ` as the placeholder keyword substituted from the wordlist.
+
+```bash
+ffuf -w /path/to/wordlist.txt:FUZZ -u http://target.com/FUZZ
+```
+
+![Directory fuzzing setup](images/image1.png)
+![Directory fuzzing results](images/image2.png)
+
+### 2. Page / Extension Fuzzing
+
+Most sites have an `index.*` file at their root — a good anchor point to fuzz extensions against, since you don't yet know whether the backend is PHP, ASP, JSP, etc.
+
+```bash
+ffuf -w /path/to/wordlist.txt:FUZZ -u http://target.com/indexFUZZ
+```
+
+Once a working extension is confirmed, the same keyword substitution technique finds other pages using that extension:
+
+```bash
+ffuf -w /path/to/wordlist.txt:FUZZ -u http://target.com/FUZZ.php
+```
+
+![Extension fuzzing](images/image3.png)
+![Page fuzzing results](images/image4.png)
+
+**Challenge — fuzz the `/blog` directory for hidden pages:**
+```
+Flag: HTB{bru73_f0r_c0mm0n_p455w0rd5}
+```
+![Blog directory fuzzing result](images/image5.png)
+
+**Challenge — find further hidden files/directories:**
+```
+Flag: HTB{fuzz1n6_7h3_w3b!}
+```
+![Further directory/file discovery](images/image6.png)
+
+### 3. Subdomain / VHost Fuzzing
+
+A subdomain is any site that sits under a parent domain (`photos.google.com` under `google.com`). ffuf can brute-force candidate subdomains and check whether each one resolves to a live site rather than the default/parked response.
+
+**Challenge — find a customer sub-domain portal on `inlanefreight.com`:**
+```bash
+ffuf -w /path/to/subdomains-top1million-5000.txt:FUZZ -u https://FUZZ.inlanefreight.com/ -c -ic -t 200
+```
+```
+Answer: customer.inlanefreight.com
+```
+![Subdomain fuzzing result for inlanefreight.com](images/image7.png)
+
+### 4. Filtering Noise from Results
+
+Blind VHost fuzzing returns a lot of false positives — every non-existent subdomain can still return a "default" response. Since the response **size** of the default/incorrect response was known (900 bytes in this case), it could be filtered out:
+
+```bash
+ffuf -w wordlist.txt:FUZZ -u https://FUZZ.academy.htb/ -fs 900
+```
+
+![Filtering by response size](images/image8.png)
+
+**Challenge — VHost fuzz `academy.htb`:**
+```
+Answer: test.academy.htb
+```
+![VHost fuzzing result for academy.htb](images/image9.png)
+
+### 5. GET Parameter Fuzzing
+
+Parameters are typically appended after a `?` in a URL:
+```
+http://admin.academy.htb:PORT/admin/admin.php?param1=key
+```
+Substituting `FUZZ` for the parameter name and fuzzing against a parameter-name wordlist (SecLists' `burp-parameter-names.txt` works well here) reveals which parameter(s) a page actually accepts:
+
+```bash
+ffuf -w /opt/useful/seclists/Discovery/Web-Content/burp-parameter-names.txt:FUZZ -u "http://target.com/page.php?FUZZ=value"
+```
+
+![GET parameter fuzzing](images/image10.png)
+
+**Challenge — identify the accepted parameter:**
+```
+Answer: user
+```
+![Parameter fuzzing result](images/image11.png)
+
+### 6. Value Fuzzing
+
+Once a valid parameter name is known, the same technique fuzzes **values** for that parameter — useful for finding valid usernames, IDs, or other accepted input.
+
+**Challenge — build an `ids.txt` wordlist, identify an accepted value, then use it in a POST request via `curl`:**
+```
+Flag: HTB{p4r4m373r_fuzz1n6_15_k3y!}
+```
+![Value fuzzing result](images/image12.png)
+
+### 7. Skill Assessment
+
+Full chained exercise — VHost discovery, extension fuzzing, page fuzzing, parameter fuzzing, and value fuzzing combined against `*.academy.htb`.
+
+- **VHost/subdomain scan on `*.academy.htb`:** `faculty`, `test`, `archive`
+ ![Skill assessment — VHost enumeration](images/image13.png)
+ ![Skill assessment — VHost results continued](images/image14.png)
+
+- **Extension fuzzing on discovered domains:** `.php`, `.phps`, `.php7`
+ ![Skill assessment — extension fuzzing](images/image15.png)
+
+- **Locating the restricted page** (`"You don't have access!"`) and then **identifying its accepted parameters:** `user`, `username`
+ ![Skill assessment — restricted page and parameter discovery](images/image16.png)
+ ![Skill assessment — parameter fuzzing result](images/image17.png)
+
+- **Fuzzing parameter values for a working credential, then confirming via `curl`:**
+```bash
+ffuf -w Downloads/usernames.txt:FUZZ \
+  -u http://faculty.academy.htb:39948/courses/linux-security.php7 \
+  -c -ic -t 200 \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'username=FUZZ' -X POST -fs 781
+```
+![Value fuzzing scan](images/image18.png)
+
+```bash
+curl http://faculty.academy.htb:39948/courses/linux-security.php \
+  -X POST \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'username=harry'
+```
+```
+Flag: HTB{w3b_fuzz1n6_m4573r}
+```
+![Final flag capture](images/image19.png)
+![Skill assessment completion](images/image20.png)
+
+## Key Takeaways
+
+- `ffuf`'s core workflow is the same regardless of what's being fuzzed (directories, extensions, VHosts, parameters, values) — only the target position of the `FUZZ` keyword and the wordlist change.
+- Filtering (`-fs`, `-fc`, `-fw`) is essential once you're past simple directory brute-forcing — raw results are mostly noise without it.
+- Parameter and value fuzzing is the step most people skip, but it's often where real application logic (and real vulnerabilities) surface — a hidden parameter can expose admin functionality a normal user would never see in the UI.
+- This directly carried over into the [KSG Gym recon work](../../) — the same discovery mindset applies whether you're hunting hidden ffuf paths in a lab or enumerating an exposed `.git`/`database.sql` on a live target.
+
+## Conclusion
+
+FFUF is one of the highest-value tools in a web app pentester's kit precisely because so much attack surface is never linked from the visible UI. This module built the full workflow — directories, extensions, VHosts, and parameters/values — and the filtering discipline needed to make fuzzing results actually usable instead of drowning in false positives.
