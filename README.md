@@ -10,7 +10,7 @@ I post consistently here as part of building a public track record as a cybersec
 |---|---|---|---|
 | 01 | [DNS in Detail](01-dns-in-detail/) | TryHackMe | Networking fundamentals |
 | 02 | [Junior Security Analyst Intro](02-junior-security-analyst/) | TryHackMe | SOC / Blue team |
-| 03 | [Attacking Web Applications with FFUF](03-attacking-web-apps-with-ffuf/) | HTB Academy | Web fuzzing |
+| 03 | [Attacking-web-apps-with-ffuf](03-attacking-web-apps-with-ffuf/) | HTB Academy | Web fuzzing |
 | 04 | [Attacktive Directory](04-attacktive-directory/) | TryHackMe | Active Directory exploitation |
 
 ## Format
